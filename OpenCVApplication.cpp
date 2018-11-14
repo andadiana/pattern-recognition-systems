@@ -1154,6 +1154,120 @@ void kmeansClustering() {
 }
 
 
+void principalComponentAnalysis() {
+	// Read points from file
+	char fname[MAX_PATH];
+	while (openFileDlg(fname)) {
+		FILE* f = fopen(fname, "r");
+		int n, d;
+		fscanf(f, "%d", &n);
+		fscanf(f, "%d", &d);
+		Mat F(n, d, CV_64FC1);
+		for (int i = 0; i < n; i++) {
+			for (int j = 0; j < d; j++) {
+				float x;
+				fscanf(f, "%f", &x);
+				F.at<double>(i, j) = x;
+			}
+		}
+		fclose(f);
+
+		// Compute mean for each feature
+		vector<float> means;
+		for (int k = 0; k < d; k++) {
+			float mean = 0;
+			for (int i = 0; i < n; i++) {
+				mean += F.at<double>(i, k);
+			}
+			mean = mean / n;
+			means.push_back(mean);
+		}
+
+		/*for (int i = 0; i < d; i++) {
+			printf("Mean %d is: %f\n", i, means.at(i));
+		}*/
+
+		// Subtract means
+		Mat X(n, d, CV_64FC1);
+		for (int i = 0; i < X.rows; i++) {
+			for (int j = 0; j < X.cols; j++) {
+				X.at<double>(i, j) = F.at<double>(i, j) - means.at(j);
+			}
+		}
+
+		// Covariance matrix
+		Mat C = X.t() * X / (n - 1);
+
+		// Eigenvalue decomposition
+		Mat Lambda, Q;
+		eigen(C, Lambda, Q);
+		Q = Q.t();
+
+		for (int i = 0; i < d; i++) {
+			printf("Lambda %d: %f\n", i, Lambda.at<double>(i));
+		}
+
+		int k = 3;
+		// Extract Qk
+		Mat Qk(d, k, CV_64FC1);
+		for (int i = 0; i < d; i++) {
+			for (int j = 0; j < k; j++) {
+				Qk.at<double>(i, j) = Q.at<double>(i, j);
+			}
+		}
+
+		Mat Xpca;
+		Xpca = X * Qk;
+
+		Mat Xkapprox;
+		Xkapprox = Xpca * Qk.t();
+
+		// Compute mean absolute difference
+		float MAD = 0;
+		for (int i = 0; i < n; i++) {
+			for (int j = 0; j < d; j++) {
+				MAD += abs(X.at<double>(i, j) - Xkapprox.at<double>(i, j));
+			}
+		}
+		MAD = MAD / (n*d);
+		printf("Mean absolute difference: %f\n", MAD);
+
+		// Display the image after PCA
+		vector<float> mins(k);
+		vector<float> maxs(k);
+		for (int i = 0; i < k; i++) {
+			mins.at(i) = Xpca.at<double>(0, i);
+			maxs.at(i) = Xpca.at<double>(0, i);
+		}
+		for (int i = 0; i < n; i++) {
+			for (int j = 0; j < k; j++) {
+				if (Xpca.at<double>(i, j) < mins.at(j)) {
+					mins.at(j) = Xpca.at<double>(i, j);
+				}
+
+				if (Xpca.at<double>(i, j) > maxs.at(j)) {
+					maxs.at(j) = Xpca.at<double>(i, j);
+				}
+			}
+		}
+
+		Mat img((int)(maxs.at(0) - mins.at(0) + 1),(int)(maxs.at(1) - mins.at(1) + 1), CV_8UC1, Scalar(255));
+		for (int i = 0; i < n; i++) {
+			if (k == 2) {
+				img.at<uchar>((int)(Xpca.at<double>(i, 0) - mins.at(0)), (int)(Xpca.at<double>(i, 1) - mins.at(1))) = 0;
+			}
+			else if (k == 3) {
+				uchar val = (255 / (maxs.at(2) - mins.at(2))) * (Xpca.at<double>(i, 2) - mins.at(2));
+				img.at<uchar>((int)(Xpca.at<double>(i, 0) - mins.at(0)), (int)(Xpca.at<double>(i, 1) - mins.at(1))) = 255 - val;
+			}
+		}
+
+		imshow("After PCA", img);
+		waitKey();
+	}
+}
+
+
 int main()
 {
 	int op;
@@ -1189,6 +1303,9 @@ int main()
 
 		// PRS Lab6
 		printf(" 15 - K-means clustering\n");
+
+		// PRS Lab7
+		printf(" 16 - Principal component analysis\n");
 
 		printf(" 0 - Exit\n\n");
 		printf("Option: ");
@@ -1238,6 +1355,8 @@ int main()
 			statisticalDataAnalysis();
 		case 15:
 			kmeansClustering();
+		case 16:
+			principalComponentAnalysis();
 		}
 	} while (op != 0);
 	return 0;
