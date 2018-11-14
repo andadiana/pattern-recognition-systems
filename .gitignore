@@ -1,0 +1,12 @@
+# Visual Studio files
+.vs/
+x64/
+ipch/
+*.bat
+*.db
+*.opendb
+
+doc/
+*.csv
+Videos/
+OpenCV/
