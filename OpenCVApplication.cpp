@@ -1267,6 +1267,143 @@ void principalComponentAnalysis() {
 	}
 }
 
+int* calcHist(Mat img, int nrBins) {
+	int histSize = nrBins * 3;
+	int* hist = (int*)calloc(histSize, sizeof(int));
+	int valsPerBin = 256 / nrBins;
+	for (int i = 0; i < img.rows; i++) {
+		for (int j = 0; j < img.cols; j++) {
+			int RVal = img.at<Vec3b>(i, j)[2];
+			int GVal = img.at<Vec3b>(i, j)[1];
+			int BVal = img.at<Vec3b>(i, j)[0];
+			
+			hist[(int)(RVal/valsPerBin)]++;
+			hist[(int)(nrBins + GVal / valsPerBin)]++;
+			hist[(int)(2 * nrBins + BVal / valsPerBin)]++;
+		}
+	}
+	return hist;
+}
+
+struct neighbor {
+	int index;
+	float distance;
+
+	bool operator <(const neighbor &n) const
+	{
+		return distance < n.distance;
+	}
+};
+
+int predict(Mat featureVec, Mat labels, Mat img, int histSize, int k, int nrClasses) {
+	
+	int* hist = calcHist(img, histSize/3);
+
+	// Compute distance
+	vector<neighbor> neighbors;
+	for (int i = 0; i < featureVec.rows; i++) {
+		float dist = 0;
+		for (int t = 0; t < histSize; t++) {
+			dist += pow(featureVec.at<float>(i, t) - hist[t], 2);
+		}
+		dist = sqrt(dist);
+		neighbors.push_back(neighbor{ i, dist });
+	}
+
+	// Sort array and determine k-nearest neighbors
+	sort(neighbors.begin(), neighbors.end());
+
+	int* classesVotes = (int*)calloc(nrClasses, sizeof(int));
+	for (int i = 0; i < k; i++) {
+		classesVotes[labels.at<uchar>(neighbors.at(i).index, 0)]++;
+	}
+
+	int maxVotes = 0;
+	int maxClass = 0;
+	for (int i = 0; i < nrClasses; i++) {
+		if (classesVotes[i] > maxVotes) {
+			maxVotes = classesVotes[i];
+			maxClass = i;
+		}
+	}
+	free(classesVotes);
+	
+	return maxClass;
+}
+
+void knnClassifier() {
+	// Read training data
+	const int nrClasses = 6;
+	char classes[nrClasses][10] = { "beach", "city", "desert", "forest", "landscape", "snow" };
+
+	// Allocate feature matrix and label vector
+	int nrInst = 672;
+
+	int rowX = 0;
+	int m = 8;
+	int k = 7;
+	int histSize = 3 * m;
+	int featureDim = histSize;
+	Mat X(nrInst, featureDim, CV_32FC1);
+	Mat y(nrInst, 1, CV_8UC1);
+
+	
+
+	char fname[50];
+	//int* hist = (int*)calloc(histSize, sizeof(int));
+	for (int c = 0; c < nrClasses; c++) {
+		int fileNr = 0;
+		while (1) {
+			sprintf(fname, "Images/KNN/train/%s/%06d.jpeg", classes[c], fileNr++);
+			Mat img = imread(fname, CV_LOAD_IMAGE_COLOR);
+			if (img.cols == 0) break;
+
+			// Compute histogram
+			int* hist = calcHist(img, m);
+			for (int d = 0; d < histSize; d++)
+				X.at<float>(rowX, d) = hist[d];
+			
+			y.at<uchar>(rowX) = c;
+			rowX++;
+		}
+	}
+
+	// Confusion matrix
+	Mat C(nrClasses, nrClasses, CV_32FC1, Scalar(0));
+
+	// Read test images
+	int testInstances = 0;
+	for (int c = 0; c < nrClasses; c++) {
+		int fileNr = 0;
+		while (1) {
+			sprintf(fname, "Images/KNN/test/%s/%06d.jpeg", classes[c], fileNr++);
+			Mat img = imread(fname, CV_LOAD_IMAGE_COLOR);
+			if (img.cols == 0) break;
+			testInstances++;
+			int predictedClass = predict(X, y, img, histSize, k, nrClasses);
+			C.at<float>(c, predictedClass)++;
+			
+		}
+	}
+
+	imshow("Confusion matrix", C);
+	printf("Confusion matrix:\n");
+	for (int i = 0; i < C.rows; i++) {
+		for (int j = 0; j < C.cols; j++) {
+			printf("%.1f ", C.at<float>(i, j));
+		}
+		printf("\n");
+	}
+
+	// Compute accuracy
+	float accuracy = 0;
+	for (int i = 0; i < nrClasses; i++) {
+		accuracy += C.at<float>(i, i);
+	}
+	accuracy = accuracy / testInstances;
+	printf("Accuracy is: %f\n", accuracy);
+	waitKey();
+}
 
 int main()
 {
@@ -1306,6 +1443,9 @@ int main()
 
 		// PRS Lab7
 		printf(" 16 - Principal component analysis\n");
+
+		// PRS Lab8
+		printf(" 17 - K-nearest neighbors classifier\n");
 
 		printf(" 0 - Exit\n\n");
 		printf("Option: ");
@@ -1351,12 +1491,19 @@ int main()
 			break;
 		case 13:
 			distanceTransformPatternMatching();
+			break;
 		case 14:
 			statisticalDataAnalysis();
+			break;
 		case 15:
 			kmeansClustering();
+			break;
 		case 16:
 			principalComponentAnalysis();
+			break;
+		case 17:
+			knnClassifier();
+			break;
 		}
 	} while (op != 0);
 	return 0;
