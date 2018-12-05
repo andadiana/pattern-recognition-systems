@@ -1405,6 +1405,156 @@ void knnClassifier() {
 	waitKey();
 }
 
+void naiveBayes() {
+	const int nrClasses = 10;
+	char classes[nrClasses][2] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+	int nrinstancesPerClass[nrClasses];
+	
+	// Allocate feature matrix X and label vector y
+	//int instancesPerClass = 100;
+	int nrTraining = 60000;
+	float cProb = 0.1;
+	int nrFeatures = 28 * 28;
+	uchar threshold = 128;
+	Mat X(nrTraining, nrFeatures, CV_8UC1);
+	Mat y(nrTraining, 1, CV_8UC1);
+	Mat L255(nrClasses, nrFeatures, CV_32FC1, Scalar(0));
+	Mat apriori(nrClasses, 1, CV_32FC1);
+
+	int rowX = 0;
+	char fname[50];
+	for (int c = 0; c < nrClasses; c++) {
+		int fileNr = 0;
+		while (1) {
+			sprintf(fname, "Images/Naive Bayes/train/%s/%06d.png", classes[c], fileNr++);
+			Mat img = imread(fname, CV_LOAD_IMAGE_GRAYSCALE);
+			//if (img.cols == 0) break;
+			if (img.cols == 0) {
+				apriori.at<float>(c) = (float)fileNr / nrTraining;
+				nrinstancesPerClass[c] = fileNr;
+				break;
+			}
+
+			// Thresholding
+			for (int i = 0; i < img.rows; i++) {
+				for (int j = 0; j < img.cols; j++) {
+					if (img.at<uchar>(i, j) < threshold) {
+						X.at<uchar>(rowX, i * img.cols + j) = 0;
+					}
+					else {
+						X.at<uchar>(rowX, i * img.cols + j) = 255;
+						L255.at<float>(c, i * img.cols + j)++;
+					}
+				}
+			}
+			y.at<uchar>(rowX) = c;
+			rowX++;
+		}
+	}
+
+	// Performance of model - compute accuracy
+	int totalNrTestInstances = 0;
+	int correct = 0;
+	for (int cl = 0; cl < nrClasses; cl++) {
+		int fileNr = 0;
+		while (1) {
+			sprintf(fname, "Images/Naive Bayes/test/%s/%06d.png", classes[cl], fileNr++);
+			Mat img = imread(fname, CV_LOAD_IMAGE_GRAYSCALE);
+			//if (img.cols == 0) break;
+			if (img.cols == 0) {
+				
+				break;
+			}
+			totalNrTestInstances++;
+
+			// Thresholding
+			for (int i = 0; i < img.rows; i++) {
+				for (int j = 0; j < img.cols; j++) {
+					if (img.at<uchar>(i, j) < threshold) {
+						img.at<uchar>(i, j) = 0;
+					}
+					else {
+						img.at<uchar>(i, j) = 255;
+					}
+				}
+			}
+
+			float maxProb = INT_MIN;
+			int finalClass = 0;
+			for (int c = 0; c < nrClasses; c++) {
+				float prob = 0;
+				for (int i = 0; i < img.rows; i++) {
+					for (int j = 0; j < img.cols; j++) {
+						float p = L255.at<float>(c, i * img.cols + j) / nrinstancesPerClass[c];
+						if (img.at<uchar>(i, j) == 0) {
+							p = 1 - p;
+						}
+						if (p == 0) {
+							p = pow(10, -5);
+						}
+						prob += log(p);
+					}
+				}
+				prob += log(apriori.at<float>(c));
+				if (prob > maxProb) {
+					maxProb = prob;
+					finalClass = c;
+				}
+			}
+			if (finalClass == cl) {
+				correct++;
+			}
+		}
+	}
+	float accuracy = (float)correct / totalNrTestInstances;
+	printf("Accuracy is %f\n", accuracy);
+
+	char imgname[MAX_PATH];
+	while (openFileDlg(imgname)) {
+		Mat img = imread(imgname, CV_LOAD_IMAGE_GRAYSCALE);
+
+		// Thresholding
+		for (int i = 0; i < img.rows; i++) {
+			for (int j = 0; j < img.cols; j++) {
+				if (img.at<uchar>(i, j) < threshold) {
+					img.at<uchar>(i, j) = 0;
+				}
+				else {
+					img.at<uchar>(i, j) = 255;
+				}
+			}
+		}
+
+		float maxProb = INT_MIN;
+		int finalClass = 0;
+		for (int c = 0; c < nrClasses; c++) {
+			float prob = 0;
+			for (int i = 0; i < img.rows; i++) {
+				for (int j = 0; j < img.cols; j++) {
+					float p = L255.at<float>(c, i * img.cols + j) / nrinstancesPerClass[c];
+					if (img.at<uchar>(i, j) == 0) {
+						p = 1 - p;
+					}
+					if (p == 0) {
+						p = pow(10, -5);
+					}
+					prob += log(p);
+				}
+			}
+			prob += log(apriori.at<float>(c));
+			printf("Prob for class %d is %f\n", c, prob);
+			if (prob > maxProb) {
+				maxProb = prob;
+				finalClass = c;
+			}
+		}
+
+		printf("Predicted class is: %d\n", finalClass);
+		imshow("Image", img);
+		waitKey();
+	}
+}
+
 int main()
 {
 	int op;
@@ -1446,6 +1596,9 @@ int main()
 
 		// PRS Lab8
 		printf(" 17 - K-nearest neighbors classifier\n");
+
+		// PRS Lab9
+		printf(" 18 - Naive Bayes classifier\n");
 
 		printf(" 0 - Exit\n\n");
 		printf("Option: ");
@@ -1503,6 +1656,9 @@ int main()
 			break;
 		case 17:
 			knnClassifier();
+			break;
+		case 18:
+			naiveBayes();
 			break;
 		}
 	} while (op != 0);
