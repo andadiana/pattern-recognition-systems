@@ -1555,6 +1555,88 @@ void naiveBayes() {
 	}
 }
 
+void perceptronClassifier() {
+	// Read points from file
+	char fname[MAX_PATH];
+	while (openFileDlg(fname)) {
+		Mat img = imread(fname, CV_LOAD_IMAGE_COLOR);
+		
+		int nrFeatures = 3;
+		Mat X(0, nrFeatures, CV_32FC1);
+		Mat y(0, 1, CV_32FC1);
+
+		for (int i = 0; i < img.rows; i++) {
+			for (int j = 0; j < img.cols; j++) {
+				Vec3b p = img.at<Vec3b>(i, j);
+				float coords[3] = { 1, j, i };
+				if (p == Vec3b(255, 0, 0)) {
+					// blue point
+					X.push_back(Mat(1, 3, CV_32FC1, coords));
+					y.push_back(Mat(1, 1, CV_32FC1, Scalar(1)));
+				}
+				else if (p == Vec3b(0, 0, 255)) {
+					// red point
+					X.push_back(Mat(1, 3, CV_32FC1, coords));
+					y.push_back(Mat(1, 1, CV_32FC1, Scalar(-1)));
+				}
+			}
+		}
+		
+		Mat W(1, nrFeatures, CV_32FC1, {0.1, 0.1, 0.1});
+		int maxIterations = pow(10, 5);
+		float Elimit = pow(10, -5);
+		int n = X.rows;
+		float learningRate = pow(10, -4);
+		Mat partialImg;
+		img.copyTo(partialImg);
+		for (int iter = 0; iter < maxIterations; iter++) {
+			float E = 0;
+			Mat deriv(1, nrFeatures, CV_32FC1, { 0, 0, 0 });
+			for (int i = 0; i < n; i++) {
+				float z = 0;
+				for (int j = 0; j < W.cols; j++) {
+					z += W.at<float>(j) * X.at<float>(i, j);
+				}
+				if (z * y.at<float>(i) < 0) {
+					for (int j = 0; j < X.cols; j++) {
+						deriv.at<float>(j) -= y.at<float>(i) * X.at<float>(i, j);
+					}
+					E++;
+				}
+			}
+			E = E / n;
+			for (int j = 0; j < nrFeatures; j++) {
+				deriv.at<float>(j) /= n;
+			}
+			if (E < Elimit)
+				break;
+			for (int j = 0; j < W.cols; j++) {
+				W.at<float>(j) -= learningRate * deriv.at<float>(j);
+			}
+			/*int y1 = (int)(-W.at<float>(0) / W.at<float>(2));
+			int y2 = (int)(-(W.at<float>(0) + img.cols * W.at<float>(1)) / W.at<float>(2));
+			printf("y1 is %d y2 is %d\n", y1, y2);
+			line(partialImg, Point(0, y1), Point(img.cols, y2), Scalar(0, 255, 0));
+			imshow("Perceptron", partialImg);
+			waitKey(100);*/
+		}
+		printf("Weights:\n");
+		for (int j = 0; j < W.cols; j++) {
+			printf("W[%d]: %f\n", j, W.at<float>(j));
+		}
+
+		// Draw line
+		Mat newImg;
+		img.copyTo(newImg);
+		int y1 = (int)(-W.at<float>(0) / W.at<float>(2));
+		int y2 = (int)(-(W.at<float>(0) + img.cols * W.at<float>(1)) / W.at<float>(2));
+		printf("y1 is %d y2 is %d\n", y1, y2);
+		line(newImg, Point(0, y1), Point(img.cols, y2), Scalar(0, 255, 0));
+		imshow("Perceptron", newImg);
+		waitKey();
+	}
+}
+
 int main()
 {
 	int op;
@@ -1599,6 +1681,9 @@ int main()
 
 		// PRS Lab9
 		printf(" 18 - Naive Bayes classifier\n");
+
+		// PRS Lab10
+		printf(" 19 - Perceptrion classifier\n");
 
 		printf(" 0 - Exit\n\n");
 		printf("Option: ");
@@ -1659,6 +1744,9 @@ int main()
 			break;
 		case 18:
 			naiveBayes();
+			break;
+		case 19:
+			perceptronClassifier();
 			break;
 		}
 	} while (op != 0);
