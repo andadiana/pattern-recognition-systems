@@ -1637,6 +1637,143 @@ void perceptronClassifier() {
 	}
 }
 
+struct weaklearner {
+	int feature_i;
+	int threshold;
+	int class_label;
+	float error;
+	int classify(Mat X) {
+		if (X.at<float>(feature_i) < threshold)
+			return class_label;
+		else
+			return -class_label;
+	}
+};
+
+int const MAXT = 100;
+
+struct classifier {
+	int T;
+	float alphas[MAXT];
+	weaklearner hs[MAXT];
+	int classify(Mat X) {
+		float x = 0;
+		for (int t = 0; t < T; t++) {
+			x += alphas[t] * hs[t].classify(X);
+		}
+		if (x < 0) {
+			return -1;
+		}
+		else {
+			return 1;
+		}
+	}
+};
+
+weaklearner findWeakLearner(Mat X, Mat y, Mat w, int imgSize) {
+	weaklearner bestH = { 0, 0, 0, 0 };
+	float bestErr = INT_MAX;
+	for (int j = 0; j < X.cols; j++) {
+		for (int t = 0; t < imgSize; t++) {
+			for (int class_label = -1; class_label < 2; class_label += 2) {
+				float err = 0;
+				for (int i = 0; i < X.rows; i++) {
+					float zi;
+					if (X.at<float>(i, j) < t) {
+						zi = class_label;
+					}
+					else {
+						zi = -class_label;
+					}
+					if (zi * y.at<float>(i) < 0) {
+						err += w.at<float>(i);
+					}
+				}
+				if (err < bestErr) {
+					bestErr = err;
+					bestH = { j, t, class_label, err };
+				}
+			}
+		}
+	}
+	return bestH;
+}
+
+void drawBoundary(Mat img, classifier clf) {
+	for (int i = 0; i < img.rows; i++) {
+		for (int j = 0; j < img.cols; j++) {
+			if (img.at<Vec3b>(i, j) == Vec3b(255, 255, 255)) {
+				float v[] = { (float)j ,(float)i };
+				Mat X(1, 2, CV_32FC1, v);
+				int res = clf.classify(X);
+				if (res < 0) {
+					img.at<Vec3b>(i, j) = { 255, 153, 153 };
+				}
+				else {
+					img.at<Vec3b>(i, j) = { 153, 255, 255 };
+				}
+			}
+		}
+	}
+	imshow("Boundary", img);
+	waitKey();
+}
+
+void adaBoost() {
+	char fname[MAX_PATH];
+	while (openFileDlg(fname)) {
+		Mat img = imread(fname, CV_LOAD_IMAGE_COLOR);
+		int imgSize = img.rows;
+
+		int nrFeatures = 2;
+		int nrExamples = 0;
+		Mat X(0, nrFeatures, CV_32FC1);
+		Mat y(0, 1, CV_32FC1);
+
+		for (int i = 0; i < img.rows; i++) {
+			for (int j = 0; j < img.cols; j++) {
+				Vec3b p = img.at<Vec3b>(i, j);
+				float coords[2] = { j, i };
+				if (p == Vec3b(255, 0, 0)) {
+					// blue point
+					X.push_back(Mat(1, nrFeatures, CV_32FC1, coords));
+					y.push_back(Mat(1, 1, CV_32FC1, Scalar(1)));
+					nrExamples++;
+				}
+				else if (p == Vec3b(0, 0, 255)) {
+					// red point
+					X.push_back(Mat(1, nrFeatures, CV_32FC1, coords));
+					y.push_back(Mat(1, 1, CV_32FC1, Scalar(-1)));
+					nrExamples++;
+				}
+			}
+		}
+
+		float initialWeight = 1 / (float)nrExamples;
+		Mat W(1, nrExamples, CV_32FC1, Scalar(initialWeight));
+		classifier c;
+		c.T = 10;
+		for (int t = 0; t < c.T; t++) {
+			weaklearner learner = findWeakLearner(X, y, W, imgSize);
+			float alpha = 0.5 * log((1 - learner.error) / learner.error);
+			c.alphas[t] = alpha;
+			c.hs[t] = learner;
+			float s = 0;
+			for (int i = 0; i < nrExamples; i++) {
+				W.at<float>(i) *= exp(-alpha * y.at<float>(i) * learner.classify(X.row(i)));
+				s += W.at<float>(i);
+			}
+			for (int i = 0; i < nrExamples; i++) {
+				W.at<float>(i) /= s;
+			}
+		}
+		
+		Mat newImg;
+		img.copyTo(newImg);
+		drawBoundary(newImg, c);
+	}
+}
+
 int main()
 {
 	int op;
@@ -1684,6 +1821,9 @@ int main()
 
 		// PRS Lab10
 		printf(" 19 - Perceptrion classifier\n");
+
+		// PRS Lab11
+		printf(" 20 - AdaBoost\n");
 
 		printf(" 0 - Exit\n\n");
 		printf("Option: ");
@@ -1747,6 +1887,9 @@ int main()
 			break;
 		case 19:
 			perceptronClassifier();
+			break;
+		case 20:
+			adaBoost();
 			break;
 		}
 	} while (op != 0);
